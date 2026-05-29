@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using VendinhaBackend.Data;
+using VendinhaBackend.Models;
 using VendinhaBackend.Requests;
 
 namespace VendinhaBackend.Controllers
@@ -18,7 +19,7 @@ namespace VendinhaBackend.Controllers
         [HttpGet("cliente/{clienteId}")]
         public IActionResult ListarPorCliente(int clienteId)
         {
-            var dividas = new List<object>();
+            var dividas = new List<Divida>();
 
             using var connection = database.CriarConexao();
             connection.Open();
@@ -34,7 +35,7 @@ namespace VendinhaBackend.Controllers
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                dividas.Add(new
+                dividas.Add(new Divida
                 {
                     Id = reader.GetInt32(0),
                     ClienteId = reader.GetInt32(1),
