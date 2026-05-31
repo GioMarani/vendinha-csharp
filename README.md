@@ -1,21 +1,16 @@
 # Vendinha Backend
 
-Projeto feito em C# com .NET 8 para controlar clientes e dívidas de uma vendinha.
+Projeto em C# com .NET 8 para controlar clientes e dívidas de uma vendinha.
 
-## O que o projeto tem
+## Padrão usado
 
-- Cadastro, consulta, alteração e exclusão de clientes
-- Cadastro, consulta, pagamento e exclusão de dívidas
-- Banco de dados SQLite
-- Integração com DBeaver
-- Controllers com rotas HTTP
-- Validação de CPF
-- Validação simples de e-mail
-- Idade calculada pela data de nascimento
-- Regra para permitir apenas uma dívida aberta por cliente
-- Busca de cliente por nome
-- Paginação de 10 em 10
-- Ordenação pelo cliente que mais deve
+O projeto foi organizado no padrão pedido em aula:
+
+- Controller recebe a requisição
+- Controller chama o Service
+- Service faz validação e regra de negócio
+- Banco SQLite aberto pelo DBeaver
+- Swagger para testar as rotas
 
 ## Programas usados
 
@@ -28,80 +23,57 @@ Projeto feito em C# com .NET 8 para controlar clientes e dívidas de uma vendinh
 
 1. Abra o Visual Studio.
 2. Clique em Open a project or solution.
-3. Escolha o arquivo VendinhaBackend.csproj.
-4. Aguarde carregar o projeto.
-5. Aperte F5 para executar.
-6. Copie o endereço que aparecer no navegador ou terminal.
-
-## Como testar no navegador
-
-Depois de executar, use o endereço do projeto com as rotas.
-
-Exemplos:
-
-```text
-/api/clientes
-/api/clientes/1
-/api/dividas/cliente/1
-```
+3. Escolha o arquivo VendinhaBackend.sln ou VendinhaBackend.csproj.
+4. Aperte F5.
+5. O navegador deve abrir direto no Swagger.
 
 ## Como abrir o banco no DBeaver
 
-1. Execute o projeto uma vez.
-2. O arquivo vendinha.db será criado na pasta do projeto.
-3. Abra o DBeaver.
-4. Clique em Nova conexão.
-5. Escolha SQLite.
-6. Selecione o arquivo vendinha.db.
-7. Abra as tabelas Clientes e Dividas.
+1. Abra o DBeaver.
+2. Clique em Nova conexão.
+3. Escolha SQLite.
+4. Selecione o arquivo Database/vendinha.db.
+5. Abra as tabelas Clientes e Dividas.
 
-## Script do banco
+## CRUDs do projeto
 
-O script está na pasta:
+Clientes:
 
-```text
-Database/schema.sql
-```
+- GET /api/clientes
+- GET /api/clientes/{id}
+- POST /api/clientes
+- PUT /api/clientes/{id}
+- DELETE /api/clientes/{id}
 
-## Rotas de clientes
+Dívidas:
 
-```text
-GET /api/clientes
-GET /api/clientes/{id}
-POST /api/clientes
-PUT /api/clientes/{id}
-DELETE /api/clientes/{id}
-```
+- GET /api/dividas/cliente/{clienteId}
+- POST /api/dividas
+- PUT /api/dividas/{id}/pagar
+- DELETE /api/dividas/{id}
 
-Exemplo para cadastrar cliente:
+## Exemplo de cliente para testar no Swagger
 
-```json
 {
   "nomeCompleto": "Ana Silva",
   "cpf": "52998224725",
   "dataNascimento": "2000-05-10",
   "email": "ana@email.com"
 }
-```
 
-## Rotas de dívidas
+## Exemplo de dívida para testar no Swagger
 
-```text
-GET /api/dividas/cliente/{clienteId}
-POST /api/dividas
-PUT /api/dividas/{id}/pagar
-DELETE /api/dividas/{id}
-```
-
-Exemplo para cadastrar dívida:
-
-```json
 {
   "clienteId": 1,
   "valor": 150.75
 }
-```
 
-## Explicação curta
+## Validações principais
 
-O projeto é uma API em C# usando Controllers. O Controller recebe uma requisição HTTP, executa uma regra do sistema e devolve uma resposta. O banco de dados é SQLite e pode ser aberto no DBeaver. O projeto possui dois CRUDs: clientes e dívidas.
+- Nome obrigatório
+- CPF válido
+- CPF único
+- Data de nascimento precisa ser anterior ao dia atual
+- E-mail precisa conter @ quando informado
+- Dívida precisa ter valor maior que zero
+- Cliente só pode ter uma dívida em aberto

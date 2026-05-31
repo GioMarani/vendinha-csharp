@@ -4,7 +4,7 @@ namespace VendinhaBackend.Data
 {
     public class Database
     {
-        private string connectionString = "Data Source=C:\\data\\sqlite\\vendinha.db";
+        private string connectionString = "Data Source=Database/vendinha.db";
 
         public SqliteConnection CriarConexao()
         {

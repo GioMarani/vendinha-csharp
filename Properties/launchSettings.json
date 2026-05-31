@@ -3,10 +3,11 @@
     "VendinhaBackend": {
       "commandName": "Project",
       "launchBrowser": true,
+      "launchUrl": "swagger",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
-      "applicationUrl": "https://localhost:50106;http://localhost:50107"
+      "applicationUrl": "http://localhost:50107"
     }
   }
 }

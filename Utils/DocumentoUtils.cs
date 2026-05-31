@@ -4,6 +4,11 @@ namespace VendinhaBackend.Utils
     {
         public static string SomenteNumeros(string texto)
         {
+            if (texto == null)
+            {
+                return "";
+            }
+
             return new string(texto.Where(char.IsDigit).ToArray());
         }
 
