@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 using VendinhaBackend.Data;
 using VendinhaBackend.Models;
 using VendinhaBackend.Requests;
@@ -8,54 +10,35 @@ namespace VendinhaBackend.Services
 {
     public class ClienteService
     {
-        private readonly Database database;
+        private readonly VendinhaDbContext context;
 
-        public ClienteService(Database database)
+        public ClienteService(VendinhaDbContext context)
         {
-            this.database = database;
+            this.context = context;
         }
 
         public IActionResult Listar(string busca, int pagina)
         {
             if (pagina <= 0)
             {
-                return new BadRequestObjectResult("Página inválida.");
+                return new BadRequestObjectResult("Pagina invalida.");
             }
 
             int tamanhoPagina = 10;
             int pular = (pagina - 1) * tamanhoPagina;
-            var clientes = new List<object>();
 
-            using var connection = database.CriarConexao();
-            connection.Open();
+            var consulta = context.Clientes
+                .Include(e => e.Dividas)
+                .AsQueryable();
 
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-                SELECT c.Id, c.NomeCompleto, c.Cpf, c.DataNascimento, c.Email,
-                       COALESCE(SUM(CASE WHEN d.Situacao = 'Aberta' THEN d.Valor ELSE 0 END), 0) AS TotalDividas
-                FROM Clientes c
-                LEFT JOIN Dividas d ON d.ClienteId = c.Id
-                WHERE (@busca IS NULL OR c.NomeCompleto LIKE '%' || @busca || '%')
-                GROUP BY c.Id, c.NomeCompleto, c.Cpf, c.DataNascimento, c.Email
-                ORDER BY TotalDividas DESC, c.NomeCompleto ASC
-                LIMIT @tamanhoPagina OFFSET @pular;";
-            command.Parameters.AddWithValue("@busca", string.IsNullOrWhiteSpace(busca) ? DBNull.Value : busca);
-            command.Parameters.AddWithValue("@tamanhoPagina", tamanhoPagina);
-            command.Parameters.AddWithValue("@pular", pular);
-
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
+            if (!string.IsNullOrWhiteSpace(busca))
             {
-                var cliente = new Cliente
-                {
-                    Id = reader.GetInt32(0),
-                    NomeCompleto = reader.GetString(1),
-                    Cpf = reader.GetString(2),
-                    DataNascimento = DateTime.Parse(reader.GetString(3)),
-                    Email = reader.IsDBNull(4) ? null : reader.GetString(4)
-                };
+                consulta = consulta.Where(e => e.NomeCompleto.Contains(busca));
+            }
 
-                clientes.Add(new
+            var clientes = consulta
+                .AsEnumerable()
+                .Select(cliente => new
                 {
                     cliente.Id,
                     cliente.NomeCompleto,
@@ -63,44 +46,126 @@ namespace VendinhaBackend.Services
                     cliente.DataNascimento,
                     cliente.Idade,
                     cliente.Email,
-                    TotalDividas = reader.GetDecimal(5)
-                });
-            }
+                    TotalDividas = cliente.Dividas
+                        .Where(divida => divida.Situacao == "Aberta")
+                        .Sum(divida => divida.Valor)
+                })
+                .OrderByDescending(e => e.TotalDividas)
+                .ThenBy(e => e.NomeCompleto)
+                .Skip(pular)
+                .Take(tamanhoPagina)
+                .ToList();
 
             return new OkObjectResult(clientes);
         }
 
         public IActionResult ObterPorId(int id)
         {
-            using var connection = database.CriarConexao();
-            connection.Open();
+            var cliente = context.Clientes
+                .Include(e => e.Dividas)
+                .FirstOrDefault(e => e.Id == id);
 
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-                SELECT c.Id, c.NomeCompleto, c.Cpf, c.DataNascimento, c.Email,
-                       COALESCE(SUM(CASE WHEN d.Situacao = 'Aberta' THEN d.Valor ELSE 0 END), 0) AS TotalDividas
-                FROM Clientes c
-                LEFT JOIN Dividas d ON d.ClienteId = c.Id
-                WHERE c.Id = @id
-                GROUP BY c.Id, c.NomeCompleto, c.Cpf, c.DataNascimento, c.Email;";
-            command.Parameters.AddWithValue("@id", id);
-
-            using var reader = command.ExecuteReader();
-            if (!reader.Read())
+            if (cliente == null)
             {
-                return new NotFoundObjectResult("Cliente não encontrado.");
+                return new NotFoundObjectResult("Cliente nao encontrado.");
+            }
+
+            return new OkObjectResult(MontarResposta(cliente));
+        }
+
+        public IActionResult Criar(CriarClienteRequest request)
+        {
+            if (request == null)
+            {
+                return new BadRequestObjectResult("Dados invalidos.");
             }
 
             var cliente = new Cliente
             {
-                Id = reader.GetInt32(0),
-                NomeCompleto = reader.GetString(1),
-                Cpf = reader.GetString(2),
-                DataNascimento = DateTime.Parse(reader.GetString(3)),
-                Email = reader.IsDBNull(4) ? null : reader.GetString(4)
+                NomeCompleto = request.NomeCompleto,
+                Cpf = DocumentoUtils.SomenteNumeros(request.Cpf),
+                DataNascimento = request.DataNascimento,
+                Email = request.Email
             };
 
-            return new OkObjectResult(new
+            if (!Validar(cliente, out var erros))
+            {
+                return new BadRequestObjectResult(FormatarErros(erros));
+            }
+
+            var cpfJaExiste = context.Clientes.Any(e => e.Cpf == cliente.Cpf);
+
+            if (cpfJaExiste)
+            {
+                return new BadRequestObjectResult("Ja existe cliente com este CPF.");
+            }
+
+            context.Clientes.Add(cliente);
+            context.SaveChanges();
+
+            return new CreatedResult($"/api/clientes/{cliente.Id}", MontarResposta(cliente));
+        }
+
+        public IActionResult Atualizar(int id, AtualizarClienteRequest request)
+        {
+            if (request == null)
+            {
+                return new BadRequestObjectResult("Dados invalidos.");
+            }
+
+            var cliente = context.Clientes.FirstOrDefault(e => e.Id == id);
+
+            if (cliente == null)
+            {
+                return new NotFoundObjectResult("Cliente nao encontrado.");
+            }
+
+            cliente.NomeCompleto = request.NomeCompleto;
+            cliente.DataNascimento = request.DataNascimento;
+            cliente.Email = request.Email;
+
+            if (!Validar(cliente, out var erros))
+            {
+                return new BadRequestObjectResult(FormatarErros(erros));
+            }
+
+            context.SaveChanges();
+
+            return new OkObjectResult(MontarResposta(cliente));
+        }
+
+        public IActionResult Excluir(int id)
+        {
+            var cliente = context.Clientes.FirstOrDefault(e => e.Id == id);
+
+            if (cliente == null)
+            {
+                return new NotFoundObjectResult("Cliente nao encontrado.");
+            }
+
+            context.Clientes.Remove(cliente);
+            context.SaveChanges();
+
+            return new OkObjectResult("Cliente excluido.");
+        }
+
+        private bool Validar(Cliente cliente, out List<ValidationResult> erros)
+        {
+            var contexto = new ValidationContext(cliente);
+            erros = new List<ValidationResult>();
+            return Validator.TryValidateObject(cliente, contexto, erros, true);
+        }
+
+        private static List<string> FormatarErros(List<ValidationResult> erros)
+        {
+            return erros
+                .Select(e => e.ErrorMessage)
+                .ToList();
+        }
+
+        private static object MontarResposta(Cliente cliente)
+        {
+            return new
             {
                 cliente.Id,
                 cliente.NomeCompleto,
@@ -108,133 +173,10 @@ namespace VendinhaBackend.Services
                 cliente.DataNascimento,
                 cliente.Idade,
                 cliente.Email,
-                TotalDividas = reader.GetDecimal(5)
-            });
-        }
-
-        public IActionResult Criar(CriarClienteRequest request)
-        {
-            if (request == null)
-            {
-                return new BadRequestObjectResult("Dados inválidos.");
-            }
-
-            var erro = ValidarCliente(request.NomeCompleto, request.DataNascimento, request.Email);
-
-            if (erro != "")
-            {
-                return new BadRequestObjectResult(erro);
-            }
-
-            if (!DocumentoUtils.CpfValido(request.Cpf))
-            {
-                return new BadRequestObjectResult("CPF inválido.");
-            }
-
-            string cpf = DocumentoUtils.SomenteNumeros(request.Cpf);
-
-            using var connection = database.CriarConexao();
-            connection.Open();
-
-            using var verificar = connection.CreateCommand();
-            verificar.CommandText = "SELECT COUNT(1) FROM Clientes WHERE Cpf = @cpf";
-            verificar.Parameters.AddWithValue("@cpf", cpf);
-            long existe = (long)(verificar.ExecuteScalar() ?? 0L);
-
-            if (existe > 0)
-            {
-                return new BadRequestObjectResult("Já existe cliente com este CPF.");
-            }
-
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-                INSERT INTO Clientes (NomeCompleto, Cpf, DataNascimento, Email)
-                VALUES (@nomeCompleto, @cpf, @dataNascimento, @email);
-                SELECT last_insert_rowid();";
-            command.Parameters.AddWithValue("@nomeCompleto", request.NomeCompleto);
-            command.Parameters.AddWithValue("@cpf", cpf);
-            command.Parameters.AddWithValue("@dataNascimento", request.DataNascimento.ToString("yyyy-MM-dd"));
-            command.Parameters.AddWithValue("@email", string.IsNullOrWhiteSpace(request.Email) ? DBNull.Value : request.Email.ToLower());
-
-            long id = (long)(command.ExecuteScalar() ?? 0L);
-
-            return new CreatedResult($"/api/clientes/{id}", new { Id = id });
-        }
-
-        public IActionResult Atualizar(int id, AtualizarClienteRequest request)
-        {
-            if (request == null)
-            {
-                return new BadRequestObjectResult("Dados inválidos.");
-            }
-
-            var erro = ValidarCliente(request.NomeCompleto, request.DataNascimento, request.Email);
-
-            if (erro != "")
-            {
-                return new BadRequestObjectResult(erro);
-            }
-
-            using var connection = database.CriarConexao();
-            connection.Open();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-                UPDATE Clientes
-                SET NomeCompleto = @nomeCompleto,
-                    DataNascimento = @dataNascimento,
-                    Email = @email
-                WHERE Id = @id;";
-            command.Parameters.AddWithValue("@id", id);
-            command.Parameters.AddWithValue("@nomeCompleto", request.NomeCompleto);
-            command.Parameters.AddWithValue("@dataNascimento", request.DataNascimento.ToString("yyyy-MM-dd"));
-            command.Parameters.AddWithValue("@email", string.IsNullOrWhiteSpace(request.Email) ? DBNull.Value : request.Email.ToLower());
-
-            int linhasAfetadas = command.ExecuteNonQuery();
-            if (linhasAfetadas == 0)
-            {
-                return new NotFoundObjectResult("Cliente não encontrado.");
-            }
-
-            return new OkObjectResult("Cliente atualizado.");
-        }
-
-        public IActionResult Excluir(int id)
-        {
-            using var connection = database.CriarConexao();
-            connection.Open();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM Clientes WHERE Id = @id";
-            command.Parameters.AddWithValue("@id", id);
-
-            int linhasAfetadas = command.ExecuteNonQuery();
-            if (linhasAfetadas == 0)
-            {
-                return new NotFoundObjectResult("Cliente não encontrado.");
-            }
-
-            return new OkObjectResult("Cliente excluído.");
-        }
-
-        private string ValidarCliente(string nome, DateTime dataNascimento, string email)
-        {
-            if (string.IsNullOrWhiteSpace(nome))
-            {
-                return "Nome é obrigatório.";
-            }
-
-            if (dataNascimento == DateTime.MinValue || dataNascimento.Date >= DateTime.Today)
-            {
-                return "Informe uma data de nascimento válida.";
-            }
-
-            if (!string.IsNullOrWhiteSpace(email) && !email.Contains("@"))
-            {
-                return "E-mail inválido.";
-            }
-
-            return "";
+                TotalDividas = cliente.Dividas?
+                    .Where(e => e.Situacao == "Aberta")
+                    .Sum(e => e.Valor) ?? 0
+            };
         }
     }
 }

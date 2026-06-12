@@ -1,79 +1,116 @@
 # Vendinha Backend
 
-Projeto em C# com .NET 8 para controlar clientes e dívidas de uma vendinha.
+Projeto em C# com .NET 8 para controlar clientes e dividas de uma vendinha.
 
-## Padrão usado
+## Objetivo
 
-O projeto foi organizado no padrão pedido em aula:
+A aplicacao permite:
 
-- Controller recebe a requisição
-- Controller chama o Service
-- Service faz validação e regra de negócio
-- Banco SQLite aberto pelo DBeaver
-- Swagger para testar as rotas
+- CRUD de clientes.
+- Cadastro, listagem, pagamento e exclusao de dividas.
+- Busca de cliente por nome.
+- Paginacao de clientes de 10 em 10.
+- Ordenacao dos clientes do que mais deve para o que menos deve.
+- Validacao dos dados usando Models com `DataAnnotations`.
+- Persistencia em banco SQLite.
+
+## Padrao usado
+
+O projeto foi organizado no padrao trabalhado em aula:
+
+- `Controller` recebe a chamada da API.
+- `Service` executa a regra de negocio.
+- `Model` possui as validacoes com `[Required]`, `[StringLength]`, `[Range]`, `[EmailAddress]` e validadores proprios.
+- `VendinhaDbContext` representa o banco usando Entity Framework.
+- O service chama `Validator.TryValidateObject`, como no exemplo da Loja.
+
+## Validacoes nos Models
+
+Cliente:
+
+- Nome completo obrigatorio.
+- CPF obrigatorio, com 11 numeros e CPF valido.
+- Data de nascimento obrigatoria e anterior ao dia atual.
+- Idade calculada pela data de nascimento.
+- E-mail validado quando informado.
+
+Divida:
+
+- Cliente obrigatorio.
+- Valor maior que zero.
+- Situacao obrigatoria.
+- Data de criacao obrigatoria.
+
+As regras que dependem de dados ja gravados continuam no service:
+
+- Nao permitir CPF duplicado.
+- Nao permitir mais de uma divida aberta para o mesmo cliente.
+
+Essas duas regras precisam consultar o banco, entao nao ficam somente no atributo do Model.
 
 ## Programas usados
 
 - Visual Studio
 - .NET 8
-- DBeaver
 - SQLite
+- Swagger
+- Entity Framework Core
 
 ## Como abrir no Visual Studio
 
 1. Abra o Visual Studio.
-2. Clique em Open a project or solution.
-3. Escolha o arquivo VendinhaBackend.sln ou VendinhaBackend.csproj.
+2. Clique em `Open a project or solution`.
+3. Escolha `VendinhaBackend.sln` ou `VendinhaBackend.csproj`.
 4. Aperte F5.
-5. O navegador deve abrir direto no Swagger.
+5. O navegador deve abrir no Swagger.
 
-## Como abrir o banco no DBeaver
+## Banco de dados
 
-1. Abra o DBeaver.
-2. Clique em Nova conexão.
-3. Escolha SQLite.
-4. Selecione o arquivo Database/vendinha.db.
-5. Abra as tabelas Clientes e Dividas.
+O banco fica em:
 
-## CRUDs do projeto
+```text
+Database/vendinha.db
+```
+
+O script de criacao esta em:
+
+```text
+database.sql
+```
+
+## Rotas principais
 
 Clientes:
 
-- GET /api/clientes
-- GET /api/clientes/{id}
-- POST /api/clientes
-- PUT /api/clientes/{id}
-- DELETE /api/clientes/{id}
+- `GET /api/clientes`
+- `GET /api/clientes/{id}`
+- `POST /api/clientes`
+- `PUT /api/clientes/{id}`
+- `DELETE /api/clientes/{id}`
 
-Dívidas:
+Dividas:
 
-- GET /api/dividas/cliente/{clienteId}
-- POST /api/dividas
-- PUT /api/dividas/{id}/pagar
-- DELETE /api/dividas/{id}
+- `GET /api/dividas/cliente/{clienteId}`
+- `POST /api/dividas`
+- `PUT /api/dividas/{id}/pagar`
+- `DELETE /api/dividas/{id}`
 
-## Exemplo de cliente para testar no Swagger
+## Exemplo de cliente
 
+```json
 {
   "nomeCompleto": "Ana Silva",
   "cpf": "52998224725",
   "dataNascimento": "2000-05-10",
   "email": "ana@email.com"
 }
+```
 
-## Exemplo de dívida para testar no Swagger
+## Exemplo de divida
 
+```json
 {
   "clienteId": 1,
   "valor": 150.75
 }
-
-## Validações principais
-
-- Nome obrigatório
-- CPF válido
-- CPF único
-- Data de nascimento precisa ser anterior ao dia atual
-- E-mail precisa conter @ quando informado
-- Dívida precisa ter valor maior que zero
-- Cliente só pode ter uma dívida em aberto
+```
