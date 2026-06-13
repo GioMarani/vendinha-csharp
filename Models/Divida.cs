@@ -9,7 +9,7 @@ namespace VendinhaBackend.Models
         [Required(ErrorMessage = "O cliente e obrigatorio.")]
         public int ClienteId { get; set; }
 
-        [Range(typeof(decimal), "0.01", "999999999", ErrorMessage = "O valor da divida deve ser maior que zero.")]
+        [Range(typeof(decimal), "0,01", "999999999", ErrorMessage = "O valor da divida deve ser maior que zero.")]
         public decimal Valor { get; set; }
 
         [Required(ErrorMessage = "A situacao e obrigatoria.")]
